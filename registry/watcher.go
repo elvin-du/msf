@@ -1,4 +1,4 @@
-package grpclb
+package registry
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"github.com/coreos/etcd/mvcc/mvccpb"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/naming"
+	"google.golang.org/grpc/grpclog"
 )
 
 // watcher is the implementaion of grpc.naming.Watcher
@@ -18,6 +19,10 @@ type watcher struct {
 
 // Close do nothing
 func (w *watcher) Close() {
+	err := w.client.Close()
+	if nil != err{
+		grpclog.Errorln(err)
+	}
 }
 
 // Next to return the updates

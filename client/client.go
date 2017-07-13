@@ -1,36 +1,38 @@
 package client
 
 import (
+	"msf/log"
+	"msf/registry"
 	"time"
 
+	//	"github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
-type pool struct {
-	Clients map[string]*grpc.ClientConn
-}
+const (
+	DialTimeout time.Duration = time.Second * 20
+)
 
-var DefaultPool = &pool{}
+func Get(serviceName, etcdAddr string) (*grpc.ClientConn, error) {
+	r := registry.NewResolver(serviceName)
+	b := grpc.RoundRobin(r)
 
-func init() {
-	DefaultPool.Clients = make(map[string]*grpc.ClientConn)
-}
-
-func (p *pool) Get(ip, port string) (*grpc.ClientConn, error) {
-	key := ip + ":" + port
-	client := p.Clients[key]
-	if nil == client {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		conn, err := grpc.DialContext(ctx, key, grpc.WithInsecure())
-		if err != nil {
-			cancel()
-			return nil, err
-		}
-		p.Clients[ip+port] = conn
-
-		return conn, nil
+	ctx, cancel := context.WithTimeout(context.Background(), DialTimeout)
+	defer cancel()
+	conn, err := grpc.DialContext(
+		ctx,
+		etcdAddr,
+		grpc.WithInsecure(),
+		grpc.WithBalancer(b),
+		grpc.WithUnaryInterceptor(grpc_opentracing.UnaryClientInterceptor()),
+		grpc.WithUnaryInterceptor(grpc_prometheus.UnaryClientInterceptor),
+	)
+	if err != nil {
+		log.Fatalln(err)
 	}
 
-	return client, nil
+	return conn, nil
 }

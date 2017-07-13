@@ -1,4 +1,4 @@
-package grpclb
+package registry
 
 import (
 	"errors"
@@ -19,16 +19,16 @@ func NewResolver(serviceName string) *resolver {
 	return &resolver{serviceName: serviceName}
 }
 
-// Resolve to resolve the service from etcd, target is the dial address of etcd
-// target example: "http://127.0.0.1:2379,http://127.0.0.1:12379,http://127.0.0.1:22379"
-func (re *resolver) Resolve(target string) (naming.Watcher, error) {
+// Resolve to resolve the service from etcd, etcdAddrs is the dial address of etcd
+// etcdAddrs example: "http://127.0.0.1:2379,http://127.0.0.1:12379,http://127.0.0.1:22379"
+func (re *resolver) Resolve(etcdAddrs string) (naming.Watcher, error) {
 	if re.serviceName == "" {
 		return nil, errors.New("grpclb: no service name provided")
 	}
 
 	// generate etcd client
 	client, err := etcd3.New(etcd3.Config{
-		Endpoints: strings.Split(target, ","),
+		Endpoints: strings.Split(etcdAddrs, ","),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("grpclb: creat etcd3 client failed: %s", err.Error())
