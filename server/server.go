@@ -2,6 +2,7 @@ package server
 
 import (
 	"msf/log"
+	myprome "msf/prometheus"
 	"msf/registry"
 	"msf/util"
 	"net"
@@ -9,15 +10,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus"
 	"github.com/grpc-ecosystem/go-grpc-middleware/tags"
-		"github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
+	"github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
-//	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	//	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
@@ -34,8 +37,38 @@ type Config struct {
 	PromhttpAddr string
 }
 
+func defaultAuthFunc(ctx context.Context) (context.Context, error) {
+	return ctx, nil
+}
+
+//    var interceptor grpc.UnaryServerInterceptor
+func Interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	//	err = auth(ctx)
+	//	if err != nil {
+	//		return
+	//	}
+	// 继续处理请求
+	start := time.Now()
+	resp, err = handler(ctx, req)
+	if nil != err {
+		log.Errorln(err)
+	}
+	log.Infof("spent time:%+v", time.Now().Sub(start))
+
+	log.Debugf("%+v\n", req)
+	log.Debugf("%+v\n", *info)
+
+	//	myprome.LogPrometheusCount(&myprome.CountLables{
+	//		Caller:info.FullMethod
+	//	})
+	return
+}
+
 func NewRPCServer(serviceName, etcdAddrs string, cfg *Config) *RPCServer {
 	grpc_logrus.ReplaceGrpcLogger(log.LogrusEntry)
+	if nil == cfg.AuthFunc {
+		cfg.AuthFunc = defaultAuthFunc
+	}
 
 	srv := grpc.NewServer(
 		grpc_middleware.WithUnaryServerChain(
@@ -46,6 +79,7 @@ func NewRPCServer(serviceName, etcdAddrs string, cfg *Config) *RPCServer {
 			grpc_auth.UnaryServerInterceptor(cfg.AuthFunc),
 			grpc_prometheus.UnaryServerInterceptor,
 			grpc_opentracing.UnaryServerInterceptor(),
+			Interceptor,
 		))
 
 	return &RPCServer{
@@ -58,6 +92,8 @@ func NewRPCServer(serviceName, etcdAddrs string, cfg *Config) *RPCServer {
 
 //Must first call this method
 func (s *RPCServer) Init(f func() error) {
+	myprome.Init()
+
 	if err := f(); nil != err {
 		log.Fatalln(err)
 	}
@@ -71,6 +107,7 @@ func (s *RPCServer) Run() {
 	defer listener.Close()
 
 	port := listener.Addr().(*net.TCPAddr).Port
+	log.Infof("%s rpc listening on %s:%d", s.ServiceName, util.InternalIP, port)
 
 	err = registry.Register(s.ServiceName, util.InternalIP, port, s.ETCDAddrs)
 	if err != nil {

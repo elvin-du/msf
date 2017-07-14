@@ -1,13 +1,13 @@
 package client
 
 import (
-	"msf/log"
+	//	"msf/log"
 	"msf/registry"
+	//	registry "grpclb/etcdv3"
 	"time"
 
-	//	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	//	"github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
+	//	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -22,16 +22,18 @@ func Get(serviceName, etcdAddr string) (*grpc.ClientConn, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), DialTimeout)
 	defer cancel()
+	//TODO
 	conn, err := grpc.DialContext(
 		ctx,
 		etcdAddr,
 		grpc.WithInsecure(),
 		grpc.WithBalancer(b),
-		grpc.WithUnaryInterceptor(grpc_opentracing.UnaryClientInterceptor()),
-		grpc.WithUnaryInterceptor(grpc_prometheus.UnaryClientInterceptor),
+		//		grpc.WithUnaryInterceptor(grpc_opentracing.UnaryClientInterceptor()),
+		//		grpc.WithUnaryInterceptor(grpc_prometheus.UnaryClientInterceptor),
 	)
 	if err != nil {
-		log.Fatalln(err)
+		//		log.Fatalln(err)
+		panic(err)
 	}
 
 	return conn, nil

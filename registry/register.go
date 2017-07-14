@@ -13,7 +13,7 @@ import (
 
 // Prefix should start and end with no slash
 var Prefix = "push"
-var client etcd3.Client
+var client *etcd3.Client
 var serviceKey string
 
 var stopSignal = make(chan bool, 1)
@@ -48,14 +48,15 @@ func RegisterOpt(name, host string, port int, etcdAddrs string, cfg *ConfigOptio
 
 	// get endpoints for register dial address
 	var err error
-	client, err := etcd3.New(etcd3.Config{
+	client, err = etcd3.New(etcd3.Config{
 		Endpoints:   strings.Split(etcdAddrs, ","),
 		DialTimeout: cfg.DialTimeout,
 	})
 	if err != nil {
-		grpclog.Errorf("grpclb: create etcd3 client failed: %v", err)
-		return fmt.Errorf("grpclb: create etcd3 client failed: %v", err)
+		grpclog.Errorf("registry: create etcd3 client failed: %v", err)
+		return fmt.Errorf("registry: create etcd3 client failed: %v", err)
 	}
+	//	defer client.Close()
 
 	go func() {
 		// invoke self-register with ticker
@@ -79,17 +80,17 @@ func RegisterOpt(name, host string, port int, etcdAddrs string, cfg *ConfigOptio
 					ctx, cancel = context.WithTimeout(context.Background(), cfg.RequestTimeout)
 					defer cancel()
 					if _, err := client.Put(ctx, serviceKey, serviceValue, etcd3.WithLease(resp.ID)); err != nil {
-						grpclog.Errorf("grpclb: set service '%s' with ttl to etcd3 failed: %s", name, err.Error())
+						grpclog.Errorf("registry: set service '%s' with ttl to etcd3 failed: %s", name, err.Error())
 					}
 				} else {
-					grpclog.Printf("grpclb: service '%s' connect to etcd3 failed: %s", name, err.Error())
+					grpclog.Printf("registry: service '%s' connect to etcd3 failed: %s", name, err.Error())
 				}
 			} else {
 				// refresh set to true for not notifying the watcher
 				ctx, cancel = context.WithTimeout(context.Background(), cfg.RequestTimeout)
 				defer cancel()
 				if _, err := client.Put(ctx, serviceKey, serviceValue, etcd3.WithLease(resp.ID)); err != nil {
-					grpclog.Errorf("grpclb: refresh service '%s' with ttl to etcd3 failed: %s", name, err.Error())
+					grpclog.Errorf("registry: refresh service '%s' with ttl to etcd3 failed: %s", name, err.Error())
 				}
 			}
 
@@ -106,13 +107,14 @@ func RegisterOpt(name, host string, port int, etcdAddrs string, cfg *ConfigOptio
 
 // UnRegister delete registered service from etcd
 func UnRegister() error {
+	defer client.Close()
 	stopSignal <- true
 	stopSignal = make(chan bool, 1) // just a hack to avoid multi UnRegister deadlock
-	var err error
 	if _, err := client.Delete(context.Background(), serviceKey); err != nil {
-		grpclog.Errorf("grpclb: deregister '%s' failed: %s", serviceKey, err.Error())
-	} else {
-		grpclog.Printf("grpclb: deregister '%s' ok.", serviceKey)
+		grpclog.Errorf("registry: deregister '%s' failed: %s", serviceKey, err.Error())
+		return err
 	}
-	return err
+
+	grpclog.Printf("registry: deregister '%s' ok.", serviceKey)
+	return nil
 }

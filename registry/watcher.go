@@ -2,12 +2,13 @@ package registry
 
 import (
 	"fmt"
+	"msf/log"
 
 	etcd3 "github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/mvcc/mvccpb"
 	"golang.org/x/net/context"
+	//	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/naming"
-	"google.golang.org/grpc/grpclog"
 )
 
 // watcher is the implementaion of grpc.naming.Watcher
@@ -20,8 +21,8 @@ type watcher struct {
 // Close do nothing
 func (w *watcher) Close() {
 	err := w.client.Close()
-	if nil != err{
-		grpclog.Errorln(err)
+	if nil != err {
+		log.Errorln(err)
 	}
 }
 
@@ -29,7 +30,7 @@ func (w *watcher) Close() {
 func (w *watcher) Next() ([]*naming.Update, error) {
 	// prefix is the etcd prefix/value to watch
 	prefix := fmt.Sprintf("/%s/%s/", Prefix, w.re.serviceName)
-
+	//	log.Debugln("prefix:", prefix)
 	// check if is initialized
 	if !w.isInitialized {
 		// query addresses from etcd
