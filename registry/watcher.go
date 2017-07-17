@@ -61,7 +61,8 @@ func (w *watcher) Next() ([]*naming.Update, error) {
 			}
 		}
 	}
-	return nil, nil
+	log.Debugln("error ")
+	return nil, fmt.Errorf("should not be here")
 }
 
 func extractAddrs(resp *etcd3.GetResponse) []string {

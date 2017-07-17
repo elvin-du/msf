@@ -6,7 +6,9 @@ import (
 	"time"
 
 	etcd3 "github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes"
+	etcdnaming "github.com/coreos/etcd/clientv3/naming"
+	"google.golang.org/grpc/naming"
+	//	"github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/grpclog"
 )
@@ -44,7 +46,7 @@ func RegisterOpt(name, host string, port int, etcdAddrs string, cfg *ConfigOptio
 	}
 
 	serviceValue := fmt.Sprintf("%s:%d", host, port)
-	serviceKey = fmt.Sprintf("/%s/%s/%s", Prefix, name, serviceValue)
+	serviceKey = fmt.Sprintf("/%s/%s", Prefix, name)
 
 	// get endpoints for register dial address
 	var err error
@@ -57,6 +59,8 @@ func RegisterOpt(name, host string, port int, etcdAddrs string, cfg *ConfigOptio
 		return fmt.Errorf("registry: create etcd3 client failed: %v", err)
 	}
 	//	defer client.Close()
+
+	r := &etcdnaming.GRPCResolver{Client: client}
 
 	go func() {
 		// invoke self-register with ticker
@@ -71,28 +75,33 @@ func RegisterOpt(name, host string, port int, etcdAddrs string, cfg *ConfigOptio
 				continue
 			}
 
-			// should get first, if not exist, set it
-			ctx, cancel = context.WithTimeout(context.Background(), cfg.RequestTimeout)
-			defer cancel()
-			_, err = client.Get(ctx, serviceKey)
-			if err != nil {
-				if err == rpctypes.ErrKeyNotFound {
-					ctx, cancel = context.WithTimeout(context.Background(), cfg.RequestTimeout)
-					defer cancel()
-					if _, err := client.Put(ctx, serviceKey, serviceValue, etcd3.WithLease(resp.ID)); err != nil {
-						grpclog.Errorf("registry: set service '%s' with ttl to etcd3 failed: %s", name, err.Error())
-					}
-				} else {
-					grpclog.Printf("registry: service '%s' connect to etcd3 failed: %s", name, err.Error())
-				}
-			} else {
-				// refresh set to true for not notifying the watcher
-				ctx, cancel = context.WithTimeout(context.Background(), cfg.RequestTimeout)
-				defer cancel()
-				if _, err := client.Put(ctx, serviceKey, serviceValue, etcd3.WithLease(resp.ID)); err != nil {
-					grpclog.Errorf("registry: refresh service '%s' with ttl to etcd3 failed: %s", name, err.Error())
-				}
+			err = r.Update(context.TODO(), serviceKey, naming.Update{Op: naming.Add, Addr: serviceValue}, etcd3.WithLease(resp.ID))
+			if nil != err {
+				grpclog.Errorln(err)
 			}
+
+			// should get first, if not exist, set it
+			//			ctx, cancel = context.WithTimeout(context.Background(), cfg.RequestTimeout)
+			//			defer cancel()
+			//			_, err = client.Get(ctx, serviceKey)
+			//			if err != nil {
+			//				if err == rpctypes.ErrKeyNotFound {
+			//					ctx, cancel = context.WithTimeout(context.Background(), cfg.RequestTimeout)
+			//					defer cancel()
+			//					if _, err := client.Put(ctx, serviceKey, serviceValue, etcd3.WithLease(resp.ID)); err != nil {
+			//						grpclog.Errorf("registry: set service '%s' with ttl to etcd3 failed: %s", name, err.Error())
+			//					}
+			//				} else {
+			//					grpclog.Printf("registry: service '%s' connect to etcd3 failed: %s", name, err.Error())
+			//				}
+			//			} else {
+			//				// refresh set to true for not notifying the watcher
+			//				ctx, cancel = context.WithTimeout(context.Background(), cfg.RequestTimeout)
+			//				defer cancel()
+			//				if _, err := client.Put(ctx, serviceKey, serviceValue, etcd3.WithLease(resp.ID)); err != nil {
+			//					grpclog.Errorf("registry: refresh service '%s' with ttl to etcd3 failed: %s", name, err.Error())
+			//				}
+			//			}
 
 			select {
 			case <-stopSignal:
